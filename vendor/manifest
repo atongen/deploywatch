@@ -1,0 +1,118 @@
+{
+	"version": 0,
+	"dependencies": [
+		{
+			"importpath": "github.com/aws/aws-sdk-go/aws",
+			"repository": "https://github.com/aws/aws-sdk-go",
+			"vcs": "git",
+			"revision": "c90f3ff9929ac7ffe5747af061e254633374fc4b",
+			"branch": "master",
+			"path": "/aws",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/aws/aws-sdk-go/internal/shareddefaults",
+			"repository": "https://github.com/aws/aws-sdk-go",
+			"vcs": "git",
+			"revision": "c90f3ff9929ac7ffe5747af061e254633374fc4b",
+			"branch": "master",
+			"path": "internal/shareddefaults",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/aws/aws-sdk-go/private/protocol",
+			"repository": "https://github.com/aws/aws-sdk-go",
+			"vcs": "git",
+			"revision": "c90f3ff9929ac7ffe5747af061e254633374fc4b",
+			"branch": "master",
+			"path": "private/protocol",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/aws/aws-sdk-go/private/signer/v2",
+			"repository": "https://github.com/aws/aws-sdk-go",
+			"vcs": "git",
+			"revision": "c90f3ff9929ac7ffe5747af061e254633374fc4b",
+			"branch": "master",
+			"path": "private/signer/v2",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/aws/aws-sdk-go/service",
+			"repository": "https://github.com/aws/aws-sdk-go",
+			"vcs": "git",
+			"revision": "c90f3ff9929ac7ffe5747af061e254633374fc4b",
+			"branch": "master",
+			"path": "/service",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/aws/aws-sdk-go/vendor/github.com/go-ini/ini",
+			"repository": "https://github.com/aws/aws-sdk-go",
+			"vcs": "git",
+			"revision": "c90f3ff9929ac7ffe5747af061e254633374fc4b",
+			"branch": "master",
+			"path": "vendor/github.com/go-ini/ini",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/aws/aws-sdk-go/vendor/github.com/jmespath/go-jmespath",
+			"repository": "https://github.com/aws/aws-sdk-go",
+			"vcs": "git",
+			"revision": "c90f3ff9929ac7ffe5747af061e254633374fc4b",
+			"branch": "master",
+			"path": "vendor/github.com/jmespath/go-jmespath",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/gizak/termui",
+			"repository": "https://github.com/gizak/termui",
+			"vcs": "git",
+			"revision": "72304ddb9b4e9838426a021aad64a5a860e98324",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/maruel/panicparse/stack",
+			"repository": "https://github.com/maruel/panicparse",
+			"vcs": "git",
+			"revision": "868abbf1ebac0fb2760cd9a410a5bd2f5afb2f76",
+			"branch": "master",
+			"path": "/stack",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/mattn/go-runewidth",
+			"repository": "https://github.com/mattn/go-runewidth",
+			"vcs": "git",
+			"revision": "97311d9f7767e3d6f422ea06661bc2c7a19e8a5d",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/mitchellh/go-wordwrap",
+			"repository": "https://github.com/mitchellh/go-wordwrap",
+			"vcs": "git",
+			"revision": "ad45545899c7b13c020ea92b2072220eefad42b8",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/nsf/termbox-go",
+			"repository": "https://github.com/nsf/termbox-go",
+			"vcs": "git",
+			"revision": "4ed959e0540971545eddb8c75514973d670cf739",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "golang.org/x/net/websocket",
+			"repository": "https://go.googlesource.com/net",
+			"vcs": "git",
+			"revision": "b3756b4b77d7b13260a0a2ec658753cf48922eac",
+			"branch": "master",
+			"path": "/websocket",
+			"notests": true
+		}
+	]
+}
