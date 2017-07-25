@@ -36,7 +36,8 @@ func CompactInstanceLine(instance *ec2.Instance, summary *codedeploy.InstanceSum
 	} else {
 		status = StatusStr("Pending")
 	}
-	return fmt.Sprintf("  %s (%s) %s\n", PadRight(name, " ", maxLen), id, status)
+	duration := DurationStr(LifecycleTotalDuration(summary))
+	return fmt.Sprintf("  %s (%s) %s %s\n", PadRight(name, " ", maxLen), id, duration, status)
 }
 
 func StatusStr(status string) string {
@@ -66,14 +67,26 @@ func SummaryLine(summary *codedeploy.InstanceSummary) string {
 	return fmt.Sprintf("    %s\n", status)
 }
 
-func LifecycleEventDuration(lifecycleEvent *codedeploy.LifecycleEvent) string {
-	var duration int
-	if lifecycleEvent.StartTime == nil || lifecycleEvent.StartTime.IsZero() {
-		duration = 0
-	} else {
-		duration = int(math.Floor(lifecycleEvent.EndTime.Sub(*lifecycleEvent.StartTime).Seconds()))
+func LifecycleTotalDuration(summary *codedeploy.InstanceSummary) int {
+	total := 0
+	if summary != nil && summary.LifecycleEvents != nil {
+		for i := 0; i < len(summary.LifecycleEvents); i++ {
+			lce := summary.LifecycleEvents[i]
+			total += LifecycleEventDuration(lce)
+		}
 	}
-	return fmt.Sprintf("%4ds", duration)
+	return total
+}
+
+func LifecycleEventDuration(lifecycleEvent *codedeploy.LifecycleEvent) int {
+	if lifecycleEvent.StartTime == nil || lifecycleEvent.StartTime.IsZero() {
+		return 0
+	}
+	return int(math.Floor(lifecycleEvent.EndTime.Sub(*lifecycleEvent.StartTime).Seconds()))
+}
+
+func DurationStr(duration int) string {
+	return fmt.Sprintf("%2dm%2ds", duration/60, duration%60)
 }
 
 func LifecycleEventName(name string) string {
@@ -82,7 +95,7 @@ func LifecycleEventName(name string) string {
 
 func LifecycleEventLine(lifecycleEvent *codedeploy.LifecycleEvent) string {
 	name := LifecycleEventName(*lifecycleEvent.LifecycleEventName)
-	duration := LifecycleEventDuration(lifecycleEvent)
+	duration := DurationStr(LifecycleEventDuration(lifecycleEvent))
 	status := StatusStr(*lifecycleEvent.Status)
 	return fmt.Sprintf("    => %s %s %s\n", name, duration, status)
 }

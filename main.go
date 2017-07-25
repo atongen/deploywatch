@@ -150,17 +150,25 @@ func main() {
 					rCh <- renderer.Update(summary)
 				}
 
+				var iAmDone bool = false
 				ticker := time.NewTicker(2 * time.Second)
 				for {
 					select {
 					case <-ticker.C:
-						summary, err := GetDeploymentInstance(cdSvc, dId, iId)
-						if err != nil {
-							fmt.Fprintf(os.Stderr, "Error getting deployment instance summary (%s/%s): %s\n", dId, iId, err)
-							continue
-						}
+						if !iAmDone {
+							summary, err := GetDeploymentInstance(cdSvc, dId, iId)
+							if err != nil {
+								fmt.Fprintf(os.Stderr, "Error getting deployment instance summary (%s/%s): %s\n", dId, iId, err)
+								continue
+							}
 
-						rCh <- renderer.Update(summary)
+							rCh <- renderer.Update(summary)
+
+							status := *summary.Status
+							if status != "Pending" && status != "InProgress" {
+								iAmDone = true
+							}
+						}
 					case <-dCh:
 						return
 					}

@@ -97,20 +97,6 @@ func (r *Renderer) MaxInstanceNameLength() int {
 	return r.maxInstNameLen
 }
 
-func (r *Renderer) IsDone() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	for _, summary := range r.InstanceSummaries {
-		status := *summary.Status
-		if status == "Pending" || status == "In Progress" {
-			return false
-		}
-	}
-
-	return true
-}
-
 func (r *Renderer) Update(summary *codedeploy.InstanceSummary) []byte {
 	r.mu.Lock()
 	defer r.mu.Unlock()
