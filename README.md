@@ -2,6 +2,8 @@
 
 Watch AWS CodeDeploy deployment statuses in real-time from the console.
 
+AWS credentials must be present in environment.
+
 ## Install
 
 Download the [latest release](https://github.com/atongen/deploywatch/releases), extract it,
@@ -49,6 +51,10 @@ $ make release
 Options:
   -compact
         Print compact output
+  -groups string
+        CodeDeploy deployment groups csv (optional)
+  -name string
+        CodeDeploy application name (optional)
   -version
         Print version information and exit
 ```
