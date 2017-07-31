@@ -7,22 +7,32 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 )
 
-func GetAwsSession() *session.Session {
+type Aws interface {
+	ListDeployments(string, string, []*string) ([]*string, error)
+	GetDeployment(string) (*codedeploy.DeploymentInfo, error)
+	ListDeploymentInstances(string) ([]*string, error)
+	DescribeInstances([]*string) ([]*ec2.Instance, error)
+	GetDeploymentInstance(string, string) (*codedeploy.InstanceSummary, error)
+}
+
+type awsEnv struct {
+	sess   *session.Session
+	cdSvc  *codedeploy.CodeDeploy
+	ec2Svc *ec2.EC2
+}
+
+func NewAwsEnv() Aws {
+	var a awsEnv = awsEnv{}
 	// Create a session to share configuration, and load external configuration.
-	return session.Must(session.NewSessionWithOptions(session.Options{
+	a.sess = session.Must(session.NewSessionWithOptions(session.Options{
 		SharedConfigState: session.SharedConfigEnable,
 	}))
+	a.cdSvc = codedeploy.New(a.sess)
+	a.ec2Svc = ec2.New(a.sess)
+	return &a
 }
 
-func GetCodeDeployService(sess *session.Session) *codedeploy.CodeDeploy {
-	return codedeploy.New(sess)
-}
-
-func GetEc2Service(sess *session.Session) *ec2.EC2 {
-	return ec2.New(sess)
-}
-
-func ListDeployments(svc *codedeploy.CodeDeploy, applicationName, deploymentGroupName string, includeOnlyStatuses []*string) ([]*string, error) {
+func (a *awsEnv) ListDeployments(applicationName, deploymentGroupName string, includeOnlyStatuses []*string) ([]*string, error) {
 	input := &codedeploy.ListDeploymentsInput{}
 	if applicationName != "" {
 		input.SetApplicationName(applicationName)
@@ -44,7 +54,7 @@ func ListDeployments(svc *codedeploy.CodeDeploy, applicationName, deploymentGrou
 			input.NextToken = nextToken
 		}
 
-		resp, err := svc.ListDeployments(input)
+		resp, err := a.cdSvc.ListDeployments(input)
 		if err != nil {
 			return nil, err
 		}
@@ -61,10 +71,10 @@ func ListDeployments(svc *codedeploy.CodeDeploy, applicationName, deploymentGrou
 	return deployments, nil
 }
 
-func GetDeployment(svc *codedeploy.CodeDeploy, deployId string) (*codedeploy.DeploymentInfo, error) {
+func (a *awsEnv) GetDeployment(deployId string) (*codedeploy.DeploymentInfo, error) {
 	input := &codedeploy.GetDeploymentInput{}
 	input.SetDeploymentId(deployId)
-	output, err := svc.GetDeployment(input)
+	output, err := a.cdSvc.GetDeployment(input)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +82,7 @@ func GetDeployment(svc *codedeploy.CodeDeploy, deployId string) (*codedeploy.Dep
 	return output.DeploymentInfo, nil
 }
 
-func ListDeploymentInstances(svc *codedeploy.CodeDeploy, deployId string) ([]*string, error) {
+func (a *awsEnv) ListDeploymentInstances(deployId string) ([]*string, error) {
 	input := &codedeploy.ListDeploymentInstancesInput{}
 	input.SetDeploymentId(deployId)
 
@@ -86,7 +96,7 @@ func ListDeploymentInstances(svc *codedeploy.CodeDeploy, deployId string) ([]*st
 			input.NextToken = nextToken
 		}
 
-		resp, err := svc.ListDeploymentInstances(input)
+		resp, err := a.cdSvc.ListDeploymentInstances(input)
 		if err != nil {
 			return nil, err
 		}
@@ -103,7 +113,7 @@ func ListDeploymentInstances(svc *codedeploy.CodeDeploy, deployId string) ([]*st
 	return instanceList, nil
 }
 
-func DescribeInstances(svc *ec2.EC2, instanceIds []*string) ([]*ec2.Instance, error) {
+func (a *awsEnv) DescribeInstances(instanceIds []*string) ([]*ec2.Instance, error) {
 	input := &ec2.DescribeInstancesInput{
 		Filters: []*ec2.Filter{
 			{
@@ -123,7 +133,7 @@ func DescribeInstances(svc *ec2.EC2, instanceIds []*string) ([]*ec2.Instance, er
 			input.NextToken = nextToken
 		}
 
-		resp, err := svc.DescribeInstances(input)
+		resp, err := a.ec2Svc.DescribeInstances(input)
 		if err != nil {
 			return nil, err
 		}
@@ -142,11 +152,11 @@ func DescribeInstances(svc *ec2.EC2, instanceIds []*string) ([]*ec2.Instance, er
 	return instances, nil
 }
 
-func GetDeploymentInstance(svc *codedeploy.CodeDeploy, deployId, instanceId string) (*codedeploy.InstanceSummary, error) {
+func (a *awsEnv) GetDeploymentInstance(deployId, instanceId string) (*codedeploy.InstanceSummary, error) {
 	input := &codedeploy.GetDeploymentInstanceInput{}
 	input.SetDeploymentId(deployId)
 	input.SetInstanceId(instanceId)
-	summary, err := svc.GetDeploymentInstance(input)
+	summary, err := a.cdSvc.GetDeploymentInstance(input)
 	if err != nil {
 		return nil, err
 	}

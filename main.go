@@ -38,9 +38,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	sess := GetAwsSession()
-	cdSvc := GetCodeDeployService(sess)
-	ec2Svc := GetEc2Service(sess)
+	aws := NewAwsEnv()
 	renderer := NewRenderer(*compactFlag)
 	checker := NewChecker()
 
@@ -91,7 +89,7 @@ func main() {
 	groups := strings.Split(*groupsFlag, ",")
 	checker.Check(7, func() {
 		for _, group := range groups {
-			currentDeployments, err := ListDeployments(cdSvc, *nameFlag, group, includeOnlyStatuses)
+			currentDeployments, err := aws.ListDeployments(*nameFlag, group, includeOnlyStatuses)
 			if err != nil {
 				fmt.Printf("Error getting deployments: %s %s %s", *nameFlag, group, err)
 			} else {
@@ -102,7 +100,7 @@ func main() {
 		}
 
 		for _, deploymentId := range checkDeploymentIds.List() {
-			_, err := renderer.AddDeployment(cdSvc, ec2Svc, deploymentId)
+			_, err := renderer.AddDeployment(aws, deploymentId)
 			if err != nil {
 				fmt.Printf("Error getting deployment information: %s", err)
 			}
@@ -118,8 +116,8 @@ func main() {
 					checkInstanceIds.Add(instanceId)
 					// begin checking instance
 					checker.CheckInstance(3, deploymentId, instanceId, func(dId, iId string) {
-						if !renderer.IsDeploymentDone(dId) || !renderer.IsInstanceDone(iId) {
-							summary, err := GetDeploymentInstance(cdSvc, dId, iId)
+						if !renderer.IsInstanceDone(iId) {
+							summary, err := aws.GetDeploymentInstance(dId, iId)
 							if err != nil {
 								fmt.Fprintf(os.Stderr, "Error getting deployment instance summary (%s/%s): %s\n", dId, iId, err)
 								return

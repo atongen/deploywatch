@@ -43,7 +43,7 @@ func (r *Renderer) GetDeployment(deploymentId string) *codedeploy.DeploymentInfo
 	return nil
 }
 
-func (r *Renderer) AddDeployment(cdSvc *codedeploy.CodeDeploy, ec2Svc *ec2.EC2, deploymentId string) (bool, error) {
+func (r *Renderer) AddDeployment(aws Aws, deploymentId string) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -54,19 +54,19 @@ func (r *Renderer) AddDeployment(cdSvc *codedeploy.CodeDeploy, ec2Svc *ec2.EC2, 
 		}
 	}
 
-	deployment, err := GetDeployment(cdSvc, deploymentId)
+	deployment, err := aws.GetDeployment(deploymentId)
 	if err != nil {
 		return false, err
 	}
 
 	// build deployment instance map
-	instanceIds, err := ListDeploymentInstances(cdSvc, deploymentId)
+	instanceIds, err := aws.ListDeploymentInstances(deploymentId)
 	if err != nil {
 		return false, err
 	}
 
 	// get instance data
-	ec2Instances, err := DescribeInstances(ec2Svc, instanceIds)
+	ec2Instances, err := aws.DescribeInstances(instanceIds)
 	if err != nil {
 		return false, err
 	}
@@ -174,21 +174,6 @@ func (r *Renderer) InstanceIds(deploymentId string) []string {
 	}
 
 	return []string{}
-}
-
-func (r *Renderer) IsDeploymentDone(deploymentId string) bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	deployment := r.GetDeployment(deploymentId)
-	if deployment != nil {
-		status := *deployment.Status
-		if status != "Created" && status != "Queued" && status != "InProgress" {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (r *Renderer) IsInstanceDone(instanceId string) bool {
