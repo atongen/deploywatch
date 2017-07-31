@@ -1,62 +1,14 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"os"
+	"path"
 	"strings"
-	"time"
 
-	"github.com/aws/aws-sdk-go/service/codedeploy"
-	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/gizak/termui"
 )
-
-func BuildRenderer(cdSvc *codedeploy.CodeDeploy, ec2Svc *ec2.EC2, deployments []string, compact bool) *Renderer {
-	renderer := NewRenderer(compact)
-
-	// get all deployment data
-	for _, deploymentId := range deployments {
-		deployment, err := GetDeployment(cdSvc, deploymentId)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error getting deployment id %s: %s", deploymentId, err)
-			continue
-		}
-
-		renderer.Deployments = append(renderer.Deployments, deployment)
-	}
-
-	// build deployment instance map
-	for _, deployment := range renderer.Deployments {
-		var deploymentId string = *deployment.DeploymentId
-
-		instanceList, err := ListDeploymentInstances(cdSvc, deploymentId)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error getting deployment instances for %s: %s", deploymentId, err)
-			continue
-		}
-
-		renderer.DeploymentInstanceMap[deploymentId] = PointerSliceToStrings(instanceList)
-	}
-
-	// get instance data
-	for _, instanceIds := range renderer.DeploymentInstanceMap {
-		ec2Instances, err := DescribeInstances(ec2Svc, StringSliceToPointers(instanceIds))
-
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error getting ec2 instance data %s: %s", instanceIds, err)
-			continue
-		}
-
-		for _, ec2Instance := range ec2Instances {
-			instanceId := *ec2Instance.InstanceId
-			renderer.Instances[instanceId] = ec2Instance
-		}
-	}
-
-	return renderer
-}
 
 // build flags
 var (
@@ -68,6 +20,8 @@ var (
 
 // cli flags
 var (
+	nameFlag    = flag.String("name", "", "CodeDeploy application name (optional)")
+	groupsFlag  = flag.String("groups", "", "CodeDeploy deployment groups csv (optional)")
 	compactFlag = flag.Bool("compact", false, "Print compact output")
 	versionFlag = flag.Bool("version", false, "Print version information and exit")
 )
@@ -80,25 +34,18 @@ func main() {
 	flag.Parse()
 
 	if *versionFlag {
-		fmt.Printf("deploywatch %s %s %s %s\n", Version, BuildTime, BuildHash, GoVersion)
+		fmt.Printf("%s %s %s %s %s", path.Base(os.Args[0]), Version, BuildTime, BuildHash, GoVersion)
 		os.Exit(0)
 	}
 
 	sess := GetAwsSession()
 	cdSvc := GetCodeDeployService(sess)
 	ec2Svc := GetEc2Service(sess)
+	renderer := NewRenderer(*compactFlag)
+	checker := NewChecker()
 
-	deploymentIds := flag.Args()
-	if len(deploymentIds) == 0 {
-		fmt.Fprintf(os.Stderr, "No deployment IDs found!")
-		os.Exit(1)
-	}
-	renderer := BuildRenderer(cdSvc, ec2Svc, deploymentIds, *compactFlag)
-
-	if len(renderer.Instances) == 0 {
-		fmt.Fprintf(os.Stderr, "No instances found in any deployments!")
-		os.Exit(1)
-	}
+	quitCh := make(chan bool)
+	renderCh := make(chan []byte)
 
 	err := termui.Init()
 	if err != nil {
@@ -125,91 +72,79 @@ func main() {
 		termui.Render(par)
 	})
 
-	quitCh := make(chan bool)
-
 	termui.Handle("/sys/kbd/q", func(termui.Event) {
 		quitCh <- true
 	})
 
-	doneChs := []chan bool{}
-	renderCh := make(chan []byte)
+	// periodically check for updated deployment information
+	// Created | Queued | InProgress | Succeeded | Failed | Stopped | Ready
+	iosCreated := "Created"
+	iosQueued := "Queued"
+	iosInProgress := "InProgress"
+	includeOnlyStatuses := []*string{&iosCreated, &iosQueued, &iosInProgress}
 
-	// start goroutine checking deploy instance
-	for deploymentId, instances := range renderer.DeploymentInstanceMap {
-		for _, instanceId := range instances {
-			if instanceId == "" {
-				continue
-			}
+	checkDeploymentIds := NewSet()
+	for _, deploymentId := range flag.Args() {
+		checkDeploymentIds.Add(deploymentId)
+	}
 
-			myDoneCh := make(chan bool)
-			go func(dId, iId string, rCh chan<- []byte, dCh <-chan bool) {
-				summary, err := GetDeploymentInstance(cdSvc, dId, iId)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error getting deployment instance summary (%s/%s): %s\n", dId, iId, err)
-				} else {
-					rCh <- renderer.Update(summary)
+	groups := strings.Split(*groupsFlag, ",")
+	checker.Check(7, func() {
+		for _, group := range groups {
+			currentDeployments, err := ListDeployments(cdSvc, *nameFlag, group, includeOnlyStatuses)
+			if err != nil {
+				fmt.Printf("Error getting deployments: %s %s %s", *nameFlag, group, err)
+			} else {
+				for _, deploymentIdPtr := range currentDeployments {
+					checkDeploymentIds.Add(*deploymentIdPtr)
 				}
+			}
+		}
 
-				var iAmDone bool = false
-				ticker := time.NewTicker(2 * time.Second)
-				for {
-					select {
-					case <-ticker.C:
-						if !iAmDone {
+		for _, deploymentId := range checkDeploymentIds.List() {
+			_, err := renderer.AddDeployment(cdSvc, ec2Svc, deploymentId)
+			if err != nil {
+				fmt.Printf("Error getting deployment information: %s", err)
+			}
+		}
+	})
+
+	checkInstanceIds := NewSet()
+	// periodically check renderer for new instances
+	checker.Check(5, func() {
+		for _, deploymentId := range renderer.DeploymentIds() {
+			for _, instanceId := range renderer.InstanceIds(deploymentId) {
+				if !checkInstanceIds.Has(instanceId) {
+					checkInstanceIds.Add(instanceId)
+					// begin checking instance
+					checker.CheckInstance(3, deploymentId, instanceId, func(dId, iId string) {
+						if !renderer.IsDeploymentDone(dId) || !renderer.IsInstanceDone(iId) {
 							summary, err := GetDeploymentInstance(cdSvc, dId, iId)
 							if err != nil {
 								fmt.Fprintf(os.Stderr, "Error getting deployment instance summary (%s/%s): %s\n", dId, iId, err)
-								continue
+								return
 							}
 
-							rCh <- renderer.Update(summary)
-
-							status := *summary.Status
-							if status != "Pending" && status != "InProgress" {
-								iAmDone = true
-							}
+							renderCh <- renderer.Update(summary)
 						}
-					case <-dCh:
-						return
-					}
+					})
 				}
-			}(deploymentId, instanceId, renderCh, myDoneCh)
-			doneChs = append(doneChs, myDoneCh)
-		}
-	}
-
-	// start goroutine aggregating rendered content
-	myDoneCh := make(chan bool)
-	go func(contentCh <-chan []byte, doneCh <-chan bool) {
-		currentContent := make([]byte, 0)
-		for {
-			select {
-			case content := <-contentCh:
-				if !bytes.Equal(content, currentContent) {
-					currentContent = content
-					termui.SendCustomEvt("/usr/t", currentContent)
-				}
-			case <-doneCh:
-				return
 			}
 		}
-	}(renderCh, myDoneCh)
-	doneChs = append(doneChs, myDoneCh)
+	})
 
-	// start goroutine listening for quit signal
-	go func(qCh <-chan bool, dChs []chan bool) {
-		<-qCh
-		for _, ch := range dChs {
-			ch <- true
-		}
+	// start goroutine aggregating rendered content
+	checker.Updater(renderCh, func(content []byte) {
+		termui.SendCustomEvt("/usr/t", content)
+	})
+
+	// listen for quit signal
+	checker.Quiter(quitCh, func() {
 		termui.StopLoop()
-	}(quitCh, doneChs)
+	})
 
 	termui.Loop()
 
 	close(quitCh)
 	close(renderCh)
-	for _, ch := range doneChs {
-		close(ch)
-	}
 }

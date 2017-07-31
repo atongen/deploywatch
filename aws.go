@@ -22,6 +22,45 @@ func GetEc2Service(sess *session.Session) *ec2.EC2 {
 	return ec2.New(sess)
 }
 
+func ListDeployments(svc *codedeploy.CodeDeploy, applicationName, deploymentGroupName string, includeOnlyStatuses []*string) ([]*string, error) {
+	input := &codedeploy.ListDeploymentsInput{}
+	if applicationName != "" {
+		input.SetApplicationName(applicationName)
+	}
+	if deploymentGroupName != "" {
+		input.SetDeploymentGroupName(deploymentGroupName)
+	}
+	if len(includeOnlyStatuses) > 0 {
+		input.SetIncludeOnlyStatuses(includeOnlyStatuses)
+	}
+
+	var (
+		deployments []*string
+		nextToken   *string
+	)
+
+	for {
+		if nextToken != nil {
+			input.NextToken = nextToken
+		}
+
+		resp, err := svc.ListDeployments(input)
+		if err != nil {
+			return nil, err
+		}
+
+		nextToken = resp.NextToken
+
+		deployments = append(deployments, resp.Deployments...)
+
+		if nextToken == nil {
+			break
+		}
+	}
+
+	return deployments, nil
+}
+
 func GetDeployment(svc *codedeploy.CodeDeploy, deployId string) (*codedeploy.DeploymentInfo, error) {
 	input := &codedeploy.GetDeploymentInput{}
 	input.SetDeploymentId(deployId)
@@ -92,9 +131,7 @@ func DescribeInstances(svc *ec2.EC2, instanceIds []*string) ([]*ec2.Instance, er
 		nextToken = resp.NextToken
 
 		for _, res := range resp.Reservations {
-			for _, inst := range res.Instances {
-				instances = append(instances, inst)
-			}
+			instances = append(instances, res.Instances...)
 		}
 
 		if nextToken == nil {

@@ -8,6 +8,24 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 )
 
+func PadRight(str, pad string, length int) string {
+	for {
+		str += pad
+		if len(str) > length {
+			return str[0:length]
+		}
+	}
+}
+
+func PadLeft(str, pad string, length int) string {
+	for {
+		str = pad + str
+		if len(str) > length {
+			return str[0:length]
+		}
+	}
+}
+
 func DeploymentLine(deployment *codedeploy.DeploymentInfo) string {
 	deployId := StrColor(*deployment.DeploymentId, "cyan")
 	return fmt.Sprintf("%s %s-%s\n", deployId, *deployment.ApplicationName, *deployment.DeploymentGroupName)
