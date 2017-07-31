@@ -24,6 +24,7 @@ var (
 	groupsFlag  = flag.String("groups", "", "CodeDeploy deployment groups csv (optional)")
 	compactFlag = flag.Bool("compact", false, "Print compact output")
 	versionFlag = flag.Bool("version", false, "Print version information and exit")
+	verboseFlag = flag.Bool("verbose", false, "Print verbose output")
 )
 
 func main() {
@@ -34,7 +35,7 @@ func main() {
 	flag.Parse()
 
 	if *versionFlag {
-		fmt.Printf("%s %s %s %s %s", path.Base(os.Args[0]), Version, BuildTime, BuildHash, GoVersion)
+		fmt.Printf("%s %s %s %s %s\n", path.Base(os.Args[0]), Version, BuildTime, BuildHash, GoVersion)
 		os.Exit(0)
 	}
 
@@ -47,7 +48,7 @@ func main() {
 
 	err := termui.Init()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating terminal: %s", err)
+		fmt.Fprintf(os.Stderr, "Error creating terminal: %s\n", err)
 		os.Exit(1)
 	}
 	defer termui.Close()
@@ -87,11 +88,13 @@ func main() {
 	}
 
 	groups := strings.Split(*groupsFlag, ",")
-	checker.Check(7, func() {
+	checker.Check(5, func() {
 		for _, group := range groups {
 			currentDeployments, err := aws.ListDeployments(*nameFlag, group, includeOnlyStatuses)
 			if err != nil {
-				fmt.Printf("Error getting deployments: %s %s %s", *nameFlag, group, err)
+				if *verboseFlag {
+					fmt.Printf("Error getting deployments: %s %s %s\n", *nameFlag, group, err)
+				}
 			} else {
 				for _, deploymentIdPtr := range currentDeployments {
 					checkDeploymentIds.Add(*deploymentIdPtr)
@@ -102,24 +105,28 @@ func main() {
 		for _, deploymentId := range checkDeploymentIds.List() {
 			_, err := renderer.AddDeployment(aws, deploymentId)
 			if err != nil {
-				fmt.Printf("Error getting deployment information: %s", err)
+				if *verboseFlag {
+					fmt.Printf("Error getting deployment information: %s\n", err)
+				}
 			}
 		}
 	})
 
 	checkInstanceIds := NewSet()
 	// periodically check renderer for new instances
-	checker.Check(5, func() {
+	checker.Check(3, func() {
 		for _, deploymentId := range renderer.DeploymentIds() {
 			for _, instanceId := range renderer.InstanceIds(deploymentId) {
 				if !checkInstanceIds.Has(instanceId) {
 					checkInstanceIds.Add(instanceId)
 					// begin checking instance
-					checker.CheckInstance(3, deploymentId, instanceId, func(dId, iId string) {
+					checker.CheckInstance(2, deploymentId, instanceId, func(dId, iId string) {
 						if !renderer.IsInstanceDone(iId) {
 							summary, err := aws.GetDeploymentInstance(dId, iId)
 							if err != nil {
-								fmt.Fprintf(os.Stderr, "Error getting deployment instance summary (%s/%s): %s\n", dId, iId, err)
+								if *verboseFlag {
+									fmt.Fprintf(os.Stderr, "Error getting deployment instance summary (%s/%s): %s\n", dId, iId, err)
+								}
 								return
 							}
 
