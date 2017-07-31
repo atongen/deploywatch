@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"sort"
 	"strings"
 	"sync"
 
@@ -90,20 +91,14 @@ func (r *Renderer) getBytes() []byte {
 
 	for _, deployment := range r.Deployments {
 		deploymentId := *deployment.DeploymentId
-		instanceIds := []string{}
-
-		for _, instanceId := range r.DeploymentInstanceMap[deploymentId].List() {
-			if _, ok := r.Instances[instanceId]; !ok {
-				continue
-			}
-
-			instanceIds = append(instanceIds, instanceId)
-		}
+		instanceIds := r.DeploymentInstanceMap[deploymentId].List()
 
 		// short-circuit for deployments with 0 instances
 		if len(instanceIds) == 0 {
 			continue
 		}
+
+		sort.Strings(instanceIds)
 
 		b.WriteString(DeploymentLine(deployment))
 
