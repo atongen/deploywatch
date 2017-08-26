@@ -16,16 +16,18 @@ type Renderer struct {
 	Instances             map[string]*ec2.Instance
 	InstanceSummaries     map[string]*codedeploy.InstanceSummary
 	compact               bool
+	hideSuccess           bool
 	mu                    sync.RWMutex
 }
 
-func NewRenderer(compact bool) *Renderer {
+func NewRenderer(compact, hideSuccess bool) *Renderer {
 	return &Renderer{
 		[]*codedeploy.DeploymentInfo{},
 		map[string]*Set{},
 		map[string]*ec2.Instance{},
 		map[string]*codedeploy.InstanceSummary{},
 		compact,
+		hideSuccess,
 		sync.RWMutex{},
 	}
 }
@@ -98,14 +100,19 @@ func (r *Renderer) getBytes() []byte {
 			continue
 		}
 
+		numSuccess := r.countSuccess(instanceIds)
 		sort.Strings(instanceIds)
 
-		b.WriteString(DeploymentLine(deployment))
+		b.WriteString(DeploymentLine(deployment, numSuccess, len(instanceIds)))
 
 		for _, instanceId := range instanceIds {
 			instance := r.Instances[instanceId]
 
 			summary := r.InstanceSummaries[instanceId]
+			status := *summary.Status
+			if status == "Success" && r.hideSuccess {
+				continue
+			}
 
 			if r.compact {
 				b.WriteString(CompactInstanceLine(instance, summary, r.maxInstanceNameLength()))
@@ -169,6 +176,19 @@ func (r *Renderer) InstanceIds(deploymentId string) []string {
 	}
 
 	return []string{}
+}
+
+func (r *Renderer) countSuccess(instanceIds []string) int {
+	total := 0
+	for _, instanceId := range instanceIds {
+		if summary, ok := r.InstanceSummaries[instanceId]; ok {
+			status := *summary.Status
+			if status == "Success" {
+				total += 1
+			}
+		}
+	}
+	return total
 }
 
 func (r *Renderer) IsInstanceDone(instanceId string) bool {

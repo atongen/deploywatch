@@ -20,11 +20,12 @@ var (
 
 // cli flags
 var (
-	nameFlag    = flag.String("name", "", "CodeDeploy application name (optional)")
-	groupsFlag  = flag.String("groups", "", "CodeDeploy deployment groups csv (optional)")
-	compactFlag = flag.Bool("compact", false, "Print compact output")
-	versionFlag = flag.Bool("version", false, "Print version information and exit")
-	verboseFlag = flag.Bool("verbose", false, "Print verbose output")
+	nameFlag        = flag.String("name", "", "CodeDeploy application name (optional)")
+	groupsFlag      = flag.String("groups", "", "CodeDeploy deployment groups csv (optional)")
+	compactFlag     = flag.Bool("compact", false, "Print compact output")
+	hideSuccessFlag = flag.Bool("hide-success", false, "Do not print instances once they are successfully deployed")
+	versionFlag     = flag.Bool("version", false, "Print version information and exit")
+	verboseFlag     = flag.Bool("verbose", false, "Print verbose output")
 )
 
 func main() {
@@ -40,7 +41,7 @@ func main() {
 	}
 
 	aws := NewAwsEnv()
-	renderer := NewRenderer(*compactFlag)
+	renderer := NewRenderer(*compactFlag, *hideSuccessFlag)
 	checker := NewChecker()
 
 	quitCh := make(chan bool)

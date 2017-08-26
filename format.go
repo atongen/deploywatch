@@ -26,9 +26,9 @@ func PadLeft(str, pad string, length int) string {
 	}
 }
 
-func DeploymentLine(deployment *codedeploy.DeploymentInfo) string {
+func DeploymentLine(deployment *codedeploy.DeploymentInfo, numSuccess, numTotal int) string {
 	deployId := StrColor(*deployment.DeploymentId, "cyan")
-	return fmt.Sprintf("%s %s-%s\n", deployId, *deployment.ApplicationName, *deployment.DeploymentGroupName)
+	return fmt.Sprintf("%s %s-%s %d/%d\n", deployId, *deployment.ApplicationName, *deployment.DeploymentGroupName, numSuccess, numTotal)
 }
 
 func InstanceName(instance *ec2.Instance) string {
