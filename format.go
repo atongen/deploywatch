@@ -28,7 +28,7 @@ func PadLeft(str, pad string, length int) string {
 
 func DeploymentLine(deployment *codedeploy.DeploymentInfo, numSuccess, numTotal int) string {
 	deployId := StrColor(*deployment.DeploymentId, "cyan")
-	return fmt.Sprintf("%s %s-%s %d/%d\n", deployId, *deployment.ApplicationName, *deployment.DeploymentGroupName, numSuccess, numTotal)
+	return fmt.Sprintf("%s %s-%s (%d/%d)\n", deployId, *deployment.ApplicationName, *deployment.DeploymentGroupName, numSuccess, numTotal)
 }
 
 func InstanceName(instance *ec2.Instance) string {
@@ -100,6 +100,11 @@ func LifecycleEventDuration(lifecycleEvent *codedeploy.LifecycleEvent) int {
 	if lifecycleEvent.StartTime == nil || lifecycleEvent.StartTime.IsZero() {
 		return 0
 	}
+
+	if lifecycleEvent.EndTime == nil || lifecycleEvent.EndTime.IsZero() {
+		return 0
+	}
+
 	return int(math.Floor(lifecycleEvent.EndTime.Sub(*lifecycleEvent.StartTime).Seconds()))
 }
 

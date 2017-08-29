@@ -25,7 +25,6 @@ var (
 	compactFlag     = flag.Bool("compact", false, "Print compact output")
 	hideSuccessFlag = flag.Bool("hide-success", false, "Do not print instances once they are successfully deployed")
 	versionFlag     = flag.Bool("version", false, "Print version information and exit")
-	verboseFlag     = flag.Bool("verbose", false, "Print verbose output")
 )
 
 func main() {
@@ -55,7 +54,7 @@ func main() {
 	defer termui.Close()
 
 	par := termui.NewPar("")
-	par.BorderLabel = "AWS CodeDeploy (type 'q' to quit)"
+	par.BorderLabel = "AWS CodeDeploy (press any key to quit)"
 	par.TextFgColor = termui.ColorWhite
 	par.BorderFg = termui.ColorGreen
 
@@ -72,7 +71,7 @@ func main() {
 		termui.Render(par)
 	})
 
-	termui.Handle("/sys/kbd/q", func(termui.Event) {
+	termui.Handle("/sys/kbd", func(termui.Event) {
 		quitCh <- true
 	})
 
@@ -91,14 +90,14 @@ func main() {
 	groups := strings.Split(*groupsFlag, ",")
 	checker.Check(5, func() {
 		for _, group := range groups {
-			currentDeployments, err := aws.ListDeployments(*nameFlag, group, includeOnlyStatuses)
-			if err != nil {
-				if *verboseFlag {
-					fmt.Printf("Error getting deployments: %s %s %s\n", *nameFlag, group, err)
-				}
-			} else {
-				for _, deploymentIdPtr := range currentDeployments {
-					checkDeploymentIds.Add(*deploymentIdPtr)
+			if group != "" {
+				currentDeployments, err := aws.ListDeployments(*nameFlag, group, includeOnlyStatuses)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error getting deployments: %s %s %s\n", *nameFlag, group, err)
+				} else {
+					for _, deploymentIdPtr := range currentDeployments {
+						checkDeploymentIds.Add(*deploymentIdPtr)
+					}
 				}
 			}
 		}
@@ -106,9 +105,7 @@ func main() {
 		for _, deploymentId := range checkDeploymentIds.List() {
 			_, err := renderer.AddDeployment(aws, deploymentId)
 			if err != nil {
-				if *verboseFlag {
-					fmt.Printf("Error getting deployment information: %s\n", err)
-				}
+				fmt.Fprintf(os.Stderr, "Error getting deployment information: %s\n", err)
 			}
 		}
 	})
@@ -125,9 +122,7 @@ func main() {
 						if !renderer.IsInstanceDone(iId) {
 							summary, err := aws.GetDeploymentInstance(dId, iId)
 							if err != nil {
-								if *verboseFlag {
-									fmt.Fprintf(os.Stderr, "Error getting deployment instance summary (%s/%s): %s\n", dId, iId, err)
-								}
+								fmt.Fprintf(os.Stderr, "Error getting deployment instance summary (%s/%s): %s\n", dId, iId, err)
 								return
 							}
 

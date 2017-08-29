@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/codedeploy"
@@ -23,10 +25,24 @@ type awsEnv struct {
 
 func NewAwsEnv() Aws {
 	var a awsEnv = awsEnv{}
-	// Create a session to share configuration, and load external configuration.
-	a.sess = session.Must(session.NewSessionWithOptions(session.Options{
+
+	// https://github.com/aws/aws-sdk-go/issues/384
+	var opts session.Options = session.Options{
 		SharedConfigState: session.SharedConfigEnable,
-	}))
+	}
+
+	region := os.Getenv("AWS_REGION")
+	if region != "" {
+		opts.Config.Region = aws.String(region)
+	}
+
+	profile := os.Getenv("AWS_PROFILE")
+	if profile != "" {
+		opts.Profile = profile
+	}
+
+	// Create a session to share configuration, and load external configuration.
+	a.sess = session.Must(session.NewSessionWithOptions(opts))
 	a.cdSvc = codedeploy.New(a.sess)
 	a.ec2Svc = ec2.New(a.sess)
 	return &a

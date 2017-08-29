@@ -110,7 +110,7 @@ func (r *Renderer) getBytes() []byte {
 
 			summary := r.InstanceSummaries[instanceId]
 			status := *summary.Status
-			if status == "Success" && r.hideSuccess {
+			if status == "Succeeded" && r.hideSuccess {
 				continue
 			}
 
@@ -183,7 +183,7 @@ func (r *Renderer) countSuccess(instanceIds []string) int {
 	for _, instanceId := range instanceIds {
 		if summary, ok := r.InstanceSummaries[instanceId]; ok {
 			status := *summary.Status
-			if status == "Success" {
+			if status == "Succeeded" {
 				total += 1
 			}
 		}
