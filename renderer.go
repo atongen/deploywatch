@@ -107,8 +107,15 @@ func (r *Renderer) getBytes() []byte {
 
 		for _, instanceId := range instanceIds {
 			instance := r.Instances[instanceId]
+			if instance == nil {
+				continue
+			}
 
 			summary := r.InstanceSummaries[instanceId]
+			if summary == nil {
+				continue
+			}
+
 			status := *summary.Status
 			if status == "Succeeded" && r.hideSuccess {
 				continue
