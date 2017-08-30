@@ -97,6 +97,10 @@ func LifecycleTotalDuration(summary *codedeploy.InstanceSummary) int {
 }
 
 func LifecycleEventDuration(lifecycleEvent *codedeploy.LifecycleEvent) int {
+	if lifecycleEvent == nil {
+		return 0
+	}
+
 	if lifecycleEvent.StartTime == nil || lifecycleEvent.StartTime.IsZero() {
 		return 0
 	}
