@@ -110,23 +110,32 @@ func main() {
 		}
 	})
 
+	t := NewThrottle(1000, 1.05)
+
+	// re-render current content every second
+	checker.Check(1, func() {
+		renderCh <- renderer.Bytes()
+	})
+
 	checkInstanceIds := NewSet()
 	// periodically check renderer for new instances
-	checker.Check(3, func() {
+	checker.Check(2, func() {
 		for _, deploymentId := range renderer.DeploymentIds() {
 			for _, instanceId := range renderer.InstanceIds(deploymentId) {
 				if !checkInstanceIds.Has(instanceId) {
 					checkInstanceIds.Add(instanceId)
 					// begin checking instance
-					checker.CheckInstance(2, deploymentId, instanceId, func(dId, iId string) {
+					checker.CheckInstance(1, deploymentId, instanceId, func(dId, iId string) {
 						if !renderer.IsInstanceDone(iId) {
 							summary, err := aws.GetDeploymentInstance(dId, iId)
 							if err != nil {
-								fmt.Fprintf(os.Stderr, "Error getting deployment instance summary (%s/%s): %s\n", dId, iId, err)
-								return
+								t.Throttle()
+								//fmt.Fprintf(os.Stderr, "Error getting deployment instance summary (%s/%s): %s\n", dId, iId, err)
+							} else {
+								renderCh <- renderer.Update(summary)
 							}
 
-							renderCh <- renderer.Update(summary)
+							t.Sleep()
 						}
 					})
 				}
