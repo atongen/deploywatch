@@ -18,6 +18,10 @@ func NewThrottle(sleep int64, increase float64) Throttle {
 	}
 }
 
+func (t Throttle) GetSleep() float64 {
+	return float64(t.sleep * time.Second)
+}
+
 func (t Throttle) Sleep() {
 	time.Sleep(t.sleep)
 }

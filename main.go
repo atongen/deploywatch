@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"path"
 	"strings"
@@ -27,17 +28,30 @@ var (
 	versionFlag     = flag.Bool("version", false, "Print version information and exit")
 )
 
+func versionInfo() string {
+	return fmt.Sprintf("%s %s %s %s %s", path.Base(os.Args[0]), Version, BuildTime, BuildHash, GoVersion)
+}
+
 func main() {
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "λ %s [OPTIONS] DEPLOY_ID [DEPLOY_ID]...\nOptions:\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "%s\n\nUsage: λ %s [OPTIONS] DEPLOY_ID [DEPLOY_ID]...\nOptions:\n", versionInfo(), os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
 
 	if *versionFlag {
-		fmt.Printf("%s %s %s %s %s\n", path.Base(os.Args[0]), Version, BuildTime, BuildHash, GoVersion)
+		fmt.Fprintf(os.Stderr, "%s\n", versionInfo())
 		os.Exit(0)
 	}
+
+	logFile, err := os.OpenFile("/tmp/deploywatch.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		fmt.Printf("error opening log file: %v", err)
+		os.Exit(1)
+	}
+	defer logFile.Close()
+
+	logger := log.New(logFile, "", log.Lshortfile)
 
 	aws := NewAwsEnv()
 	renderer := NewRenderer(*compactFlag, *hideSuccessFlag)
@@ -46,9 +60,9 @@ func main() {
 	quitCh := make(chan bool)
 	renderCh := make(chan []byte)
 
-	err := termui.Init()
+	err = termui.Init()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating terminal: %s\n", err)
+		logger.Printf("Error creating terminal: %s\n", err)
 		os.Exit(1)
 	}
 	defer termui.Close()
@@ -93,7 +107,7 @@ func main() {
 			if group != "" {
 				currentDeployments, err := aws.ListDeployments(*nameFlag, group, includeOnlyStatuses)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error getting deployments: %s %s %s\n", *nameFlag, group, err)
+					logger.Printf("Error getting deployments: %s %s %s\n", *nameFlag, group, err)
 				} else {
 					for _, deploymentIdPtr := range currentDeployments {
 						checkDeploymentIds.Add(*deploymentIdPtr)
@@ -105,7 +119,7 @@ func main() {
 		for _, deploymentId := range checkDeploymentIds.List() {
 			_, err := renderer.AddDeployment(aws, deploymentId)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error getting deployment information: %s\n", err)
+				logger.Printf("Error getting deployment information: %s\n", err)
 			}
 		}
 	})
@@ -130,7 +144,8 @@ func main() {
 							summary, err := aws.GetDeploymentInstance(dId, iId)
 							if err != nil {
 								t.Throttle()
-								//fmt.Fprintf(os.Stderr, "Error getting deployment instance summary (%s/%s): %s\n", dId, iId, err)
+								logger.Printf("Error getting deployment instance summary (%s/%s): %s\n", dId, iId, err)
+								logger.Printf("Instance check throttle set to %f\n", t.GetSleep())
 							} else {
 								renderCh <- renderer.Update(summary)
 							}
