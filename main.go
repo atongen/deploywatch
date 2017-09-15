@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/gizak/termui"
 )
@@ -126,11 +127,6 @@ func main() {
 
 	t := NewThrottle(1000, 1.05)
 
-	// re-render current content every second
-	checker.Check(1, func() {
-		renderCh <- renderer.Bytes()
-	})
-
 	checkInstanceIds := NewSet()
 	// periodically check renderer for new instances
 	checker.Check(2, func() {
@@ -145,12 +141,12 @@ func main() {
 							if err != nil {
 								t.Throttle()
 								logger.Printf("Error getting deployment instance summary (%s/%s): %s\n", dId, iId, err)
-								logger.Printf("Instance check throttle set to %f\n", t.GetSleep())
+								logger.Printf("Instance check throttle set to %s\n", t.Sleep())
 							} else {
 								renderCh <- renderer.Update(summary)
 							}
 
-							t.Sleep()
+							time.Sleep(t.Sleep())
 						}
 					})
 				}
