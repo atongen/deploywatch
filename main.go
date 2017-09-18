@@ -128,7 +128,7 @@ func main() {
 		}
 	})
 
-	t := NewThrottle(1000, 0.1)
+	t := NewThrottle(1.0, 0.025)
 
 	checkInstanceIds := NewSet()
 	// periodically check renderer for new instances
