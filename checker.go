@@ -2,29 +2,36 @@ package main
 
 import (
 	"bytes"
+	"log"
 	"time"
 )
 
 type Checker struct {
 	quiters []chan bool
+	logger  *log.Logger
 }
 
-func NewChecker() *Checker {
+func NewChecker(logger *log.Logger) *Checker {
 	return &Checker{
 		[]chan bool{},
+		logger,
 	}
 }
 
 func (c *Checker) Quit() {
+	c.logger.Println("Starting to quit")
 	for i := len(c.quiters) - 1; i >= 0; i-- {
-		c.quiters[i] <- true
-		close(c.quiters[i])
+		go func(qCh chan<- bool) {
+			qCh <- true
+			close(qCh)
+		}(c.quiters[i])
 	}
 }
 
 func (c *Checker) Quiter(quitCh <-chan bool, fn func()) {
 	go func(qCh <-chan bool) {
 		<-qCh
+		c.logger.Println("Received quit signal")
 		c.Quit()
 		fn()
 	}(quitCh)

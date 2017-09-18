@@ -26,6 +26,7 @@ var (
 	groupsFlag      = flag.String("groups", "", "CodeDeploy deployment groups csv (optional)")
 	compactFlag     = flag.Bool("compact", false, "Print compact output")
 	hideSuccessFlag = flag.Bool("hide-success", false, "Do not print instances once they are successfully deployed")
+	logFileFlag     = flag.String("log-file", "/tmp/deploywatch.log", "Location of log file")
 	versionFlag     = flag.Bool("version", false, "Print version information and exit")
 )
 
@@ -45,18 +46,18 @@ func main() {
 		os.Exit(0)
 	}
 
-	logFile, err := os.OpenFile("/tmp/deploywatch.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	logFile, err := os.OpenFile(*logFileFlag, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		fmt.Printf("error opening log file: %v", err)
 		os.Exit(1)
 	}
 	defer logFile.Close()
 
-	logger := log.New(logFile, "", log.Lshortfile)
+	logger := log.New(logFile, "", log.LstdFlags|log.Lshortfile)
 
 	aws := NewAwsEnv()
 	renderer := NewRenderer(*compactFlag, *hideSuccessFlag)
-	checker := NewChecker()
+	checker := NewChecker(logger)
 
 	quitCh := make(chan bool)
 	renderCh := make(chan []byte)
@@ -118,14 +119,16 @@ func main() {
 		}
 
 		for _, deploymentId := range checkDeploymentIds.List() {
-			_, err := renderer.AddDeployment(aws, deploymentId)
+			ok, err := renderer.AddDeployment(aws, deploymentId)
 			if err != nil {
 				logger.Printf("Error getting deployment information: %s\n", err)
+			} else if ok {
+				logger.Printf("Starting to check deployment %s\n", deploymentId)
 			}
 		}
 	})
 
-	t := NewThrottle(1000, 1.05)
+	t := NewThrottle(1000, 0.1)
 
 	checkInstanceIds := NewSet()
 	// periodically check renderer for new instances
@@ -134,19 +137,21 @@ func main() {
 			for _, instanceId := range renderer.InstanceIds(deploymentId) {
 				if !checkInstanceIds.Has(instanceId) {
 					checkInstanceIds.Add(instanceId)
-					// begin checking instance
+					logger.Printf("Starting to check instance %s (%s)\n", instanceId, deploymentId)
 					checker.CheckInstance(1, deploymentId, instanceId, func(dId, iId string) {
 						if !renderer.IsInstanceDone(iId) {
 							summary, err := aws.GetDeploymentInstance(dId, iId)
+							var sleep time.Duration
 							if err != nil {
-								t.Throttle()
+								sleep = t.Throttle()
 								logger.Printf("Error getting deployment instance summary (%s/%s): %s\n", dId, iId, err)
-								logger.Printf("Instance check throttle set to %s\n", t.Sleep())
+								logger.Printf("Instance check throttle set to %s\n", sleep)
 							} else {
+								sleep = t.Sleep()
 								renderCh <- renderer.Update(summary)
 							}
 
-							time.Sleep(t.Sleep())
+							time.Sleep(sleep)
 						}
 					})
 				}
@@ -161,6 +166,7 @@ func main() {
 
 	// listen for quit signal
 	checker.Quiter(quitCh, func() {
+		logger.Printf("Goodbye!")
 		termui.StopLoop()
 	})
 
