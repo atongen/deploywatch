@@ -47,12 +47,18 @@ $ make release
 ## Command-Line Options
 
 ```
-λ deploywatch [OPTIONS] DEPLOY_ID [DEPLOY_ID]...
+deploywatch 0.1.8 2017-09-19 00:47:11 4c120d5 go1.9
+
+Usage: λ deploywatch [OPTIONS] DEPLOY_ID [DEPLOY_ID]...
 Options:
   -compact
         Print compact output
   -groups string
         CodeDeploy deployment groups csv (optional)
+  -hide-success
+        Do not print instances once they are successfully deployed
+  -log-file string
+        Location of log file (default "/tmp/deploywatch.log")
   -name string
         CodeDeploy application name (optional)
   -version
