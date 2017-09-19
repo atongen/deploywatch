@@ -7,9 +7,9 @@ ARCH=amd64
 OS=linux darwin
 
 LDFLAGS=-ldflags "-X 'main.Version=$(VERSION)' \
-				          -X 'main.BuildTime=$(BUILD_TIME)' \
-									-X 'main.BuildHash=$(BUILD_HASH)' \
-									-X 'main.GoVersion=$(GO_VERSION)'"
+	-X 'main.BuildTime=$(BUILD_TIME)' \
+	-X 'main.BuildHash=$(BUILD_HASH)' \
+	-X 'main.GoVersion=$(GO_VERSION)'"
 
 all: clean test build
 
