@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/service/codedeploy"
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -55,7 +56,32 @@ func CompactInstanceLine(instance *ec2.Instance, summary *codedeploy.InstanceSum
 		status = StatusStr("Pending")
 	}
 	duration := DurationStr(LifecycleTotalDuration(summary))
-	return fmt.Sprintf("  %s (%s) %s %s\n", PadRight(name, " ", maxLen), id, duration, status)
+	instanceType := InstanceType(summary)
+	if instanceType == "" {
+		return fmt.Sprintf("  %s (%s) %s %s\n", PadRight(name, " ", maxLen), id, duration, status)
+	} else {
+		return fmt.Sprintf("  %s (%s) %s %s (%s)\n", PadRight(name, " ", maxLen), id, duration, status, instanceType)
+	}
+}
+
+func InstanceType(summary *codedeploy.InstanceSummary) string {
+	// * BLUE: The instance is part of the original environment.
+	// * GREEN: The instance is part of the replacement environment.
+	// InstanceType *string `locationName:"instanceType" type:"string" enum:"InstanceType"`
+	if summary.InstanceType == nil {
+		// not blue/green
+		return ""
+	} else {
+		instanceType := strings.ToLower(*summary.InstanceType)
+		switch instanceType {
+		case "blue":
+			return "original"
+		case "green":
+			return "replacement"
+		default:
+			return ""
+		}
+	}
 }
 
 func StatusStr(status string) string {
@@ -68,6 +94,8 @@ func StatusStr(status string) string {
 		color = "blue"
 	case "Succeeded":
 		color = "green"
+	case "Ready":
+		color = "blue"
 	case "Failed":
 		color = "red"
 	case "Skipped":
@@ -82,7 +110,12 @@ func StrColor(str, color string) string {
 
 func SummaryLine(summary *codedeploy.InstanceSummary) string {
 	status := StatusStr(*summary.Status)
-	return fmt.Sprintf("    %s\n", status)
+	instanceType := InstanceType(summary)
+	if instanceType == "" {
+		return fmt.Sprintf("    %s\n", status)
+	} else {
+		return fmt.Sprintf("    %s (%s)\n", status, instanceType)
+	}
 }
 
 func LifecycleTotalDuration(summary *codedeploy.InstanceSummary) int {

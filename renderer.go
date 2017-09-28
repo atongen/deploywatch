@@ -46,46 +46,68 @@ func (r *Renderer) GetDeployment(deploymentId string) *codedeploy.DeploymentInfo
 	return nil
 }
 
-func (r *Renderer) AddDeployment(aws Aws, deploymentId string) (bool, error) {
+func (r *Renderer) AddDeployment(aws Aws, deploymentId string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// ensure we don't know about this deployment already
-	for _, deployment := range r.Deployments {
-		if *deployment.DeploymentId == deploymentId {
-			return false, nil
+	var deployment *codedeploy.DeploymentInfo
+
+	// check to see if we know about this deployment
+	for i := 0; i < len(r.Deployments); i++ {
+		if *r.Deployments[i].DeploymentId == deploymentId {
+			deployment = r.Deployments[i]
+			break
 		}
 	}
 
-	deployment, err := aws.GetDeployment(deploymentId)
-	if err != nil {
-		return false, err
+	// ask aws about this deployment if we don't already know about it
+	if deployment == nil {
+		deployment, err := aws.GetDeployment(deploymentId)
+		if err != nil {
+			return err
+		}
+
+		// add deployment to our list if we just found it
+		r.Deployments = append(r.Deployments, deployment)
+		if _, ok := r.DeploymentInstanceMap[deploymentId]; !ok {
+			r.DeploymentInstanceMap[deploymentId] = NewSet()
+		}
 	}
 
-	// build deployment instance map
+	// get list of instances that are part of this deployment
 	instanceIds, err := aws.ListDeploymentInstances(deploymentId)
 	if err != nil {
-		return false, err
+		return err
 	}
 
-	// get instance data
-	ec2Instances, err := aws.DescribeInstances(instanceIds)
+	// build a list of instance ids we don't already know about
+	newInstanceIds := []*string{}
+
+	for i := 0; i < len(instanceIds); i++ {
+		instanceId := instanceIds[i]
+		if !r.DeploymentInstanceMap[deploymentId].Has(*instanceId) {
+			newInstanceIds = append(newInstanceIds, instanceId)
+		}
+	}
+
+	// no new instances at this point
+	if len(newInstanceIds) == 0 {
+		return nil
+	}
+
+	// get new instance data
+	ec2Instances, err := aws.DescribeInstances(newInstanceIds)
 	if err != nil {
-		return false, err
+		return err
 	}
 
-	r.Deployments = append(r.Deployments, deployment)
-	if _, ok := r.DeploymentInstanceMap[deploymentId]; !ok {
-		r.DeploymentInstanceMap[deploymentId] = NewSet()
-	}
-
-	for _, ec2Instance := range ec2Instances {
-		instanceId := *ec2Instance.InstanceId
+	for i := 0; i < len(ec2Instances); i++ {
+		instanceId := *ec2Instances[i].InstanceId
 		r.DeploymentInstanceMap[deploymentId].Add(instanceId)
-		r.Instances[instanceId] = ec2Instance
+		r.Instances[instanceId] = ec2Instances[i]
 	}
 
-	return true, nil
+	return nil
 }
 
 func (r *Renderer) getBytes() []byte {

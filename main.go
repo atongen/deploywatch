@@ -119,11 +119,9 @@ func main() {
 		}
 
 		for _, deploymentId := range checkDeploymentIds.List() {
-			ok, err := renderer.AddDeployment(aws, deploymentId)
+			err := renderer.AddDeployment(aws, deploymentId)
 			if err != nil {
 				logger.Printf("Error getting deployment information: %s\n", err)
-			} else if ok {
-				logger.Printf("Starting to check deployment %s\n", deploymentId)
 			}
 		}
 	})

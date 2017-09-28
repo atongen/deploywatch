@@ -64,3 +64,7 @@ Options:
   -version
         Print version information and exit
 ```
+
+## TODO
+
+* Use the golang aws sdk value/pointer conversion helpers
