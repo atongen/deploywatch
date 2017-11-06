@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"path"
 	"strings"
@@ -126,26 +127,27 @@ func main() {
 		}
 	})
 
-	t := NewThrottle(1.0, 0.025)
+	t := NewThrottle(10.0, 0.025)
 
 	checkInstanceIds := NewSet()
 	// periodically check renderer for new instances
-	checker.Check(2, func() {
+	checker.Check(1, func() {
 		for _, deploymentId := range renderer.DeploymentIds() {
 			for _, instanceId := range renderer.InstanceIds(deploymentId) {
 				if !checkInstanceIds.Has(instanceId) {
 					checkInstanceIds.Add(instanceId)
 					logger.Printf("Starting to check instance %s (%s)\n", instanceId, deploymentId)
-					checker.CheckInstance(1, deploymentId, instanceId, func(dId, iId string) {
+					checker.CheckInstance(15, deploymentId, instanceId, func(dId, iId string) {
 						if !renderer.IsInstanceDone(iId) {
 							summary, err := aws.GetDeploymentInstance(dId, iId)
 							var sleep time.Duration
+							myRand := time.Duration((rand.Float64() * 5) + 5)
 							if err != nil {
-								sleep = t.Throttle()
+								sleep = t.Throttle() + myRand
 								logger.Printf("Error getting deployment instance summary (%s/%s): %s\n", dId, iId, err)
 								logger.Printf("Instance check throttle set to %s\n", sleep)
 							} else {
-								sleep = t.Sleep()
+								sleep = t.Sleep() + myRand
 								renderCh <- renderer.Update(summary)
 							}
 
