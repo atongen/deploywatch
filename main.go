@@ -4,11 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"path"
 	"strings"
-	"time"
 
 	"github.com/gizak/termui"
 )
@@ -130,34 +128,29 @@ func main() {
 	t := NewThrottle(10.0, 0.025)
 
 	checkInstanceIds := NewSet()
-	// periodically check renderer for new instances
+	doneInstanceIds := NewSet()
+
+	// periodically update list of instances to check
 	checker.Check(1, func() {
 		for _, deploymentId := range renderer.DeploymentIds() {
 			for _, instanceId := range renderer.InstanceIds(deploymentId) {
 				if !checkInstanceIds.Has(instanceId) {
-					checkInstanceIds.Add(instanceId)
 					logger.Printf("Starting to check instance %s (%s)\n", instanceId, deploymentId)
-					checker.CheckInstance(15, deploymentId, instanceId, func(dId, iId string) {
-						if !renderer.IsInstanceDone(iId) {
-							summary, err := aws.GetDeploymentInstance(dId, iId)
-							var sleep time.Duration
-							myRand := time.Duration((rand.Float64() * 5) + 5)
-							if err != nil {
-								sleep = t.Throttle() + myRand
-								logger.Printf("Error getting deployment instance summary (%s/%s): %s\n", dId, iId, err)
-								logger.Printf("Instance check throttle set to %s\n", sleep)
-							} else {
-								sleep = t.Sleep() + myRand
-								renderCh <- renderer.Update(summary)
-							}
+					checkInstanceIds.Add(instanceId)
+				}
 
-							time.Sleep(sleep)
-						}
-					})
+				if renderer.IsInstanceDone(instanceId) && !doneInstanceIds.Has(instanceId) {
+					logger.Printf("Done checking instance %s (%s)\n", instanceId, deploymentId)
+					doneInstanceIds.Add(instanceId)
 				}
 			}
 		}
 	})
+
+	checker.Check(10, func() {
+		batchCheckInstanceIds := checkInstanceIds.Dif(doneInstanceIds)
+
+		BatchGetDeploymentInstances(deployId string, instanceIds []string) ([]*codedeploy.InstanceSummary, error) {
 
 	// start goroutine aggregating rendered content
 	checker.Updater(renderCh, func(content []byte) {
