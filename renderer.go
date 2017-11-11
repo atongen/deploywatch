@@ -237,12 +237,23 @@ func (r *Renderer) IsInstanceDone(instanceId string) bool {
 func (r *Renderer) Update(summary *codedeploy.InstanceSummary) []byte {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.doUpdate(summary)
+	return r.getBytes()
+}
 
+func (r *Renderer) BatchUpdate(summaries []*codedeploy.InstanceSummary) []byte {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, summary := range summaries {
+		r.doUpdate(summary)
+	}
+	return r.getBytes()
+}
+
+func (r *Renderer) doUpdate(summary *codedeploy.InstanceSummary) {
 	instanceArnId := *summary.InstanceId
 	result := strings.Split(instanceArnId, "/")
 	if len(result) == 2 {
 		r.InstanceSummaries[result[1]] = summary
 	}
-
-	return r.getBytes()
 }

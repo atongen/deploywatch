@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/gizak/termui"
 )
@@ -125,32 +126,51 @@ func main() {
 		}
 	})
 
-	t := NewThrottle(10.0, 0.025)
-
-	checkInstanceIds := NewSet()
-	doneInstanceIds := NewSet()
+	checkInstances := map[string]*Set{}
+	doneInstances := NewSet()
 
 	// periodically update list of instances to check
 	checker.Check(1, func() {
 		for _, deploymentId := range renderer.DeploymentIds() {
+			if _, ok := checkInstances[deploymentId]; !ok {
+				checkInstances[deploymentId] = NewSet()
+			}
+
 			for _, instanceId := range renderer.InstanceIds(deploymentId) {
-				if !checkInstanceIds.Has(instanceId) {
+				if !checkInstances[deploymentId].Has(instanceId) {
 					logger.Printf("Starting to check instance %s (%s)\n", instanceId, deploymentId)
-					checkInstanceIds.Add(instanceId)
+					checkInstances[deploymentId].Add(instanceId)
 				}
 
-				if renderer.IsInstanceDone(instanceId) && !doneInstanceIds.Has(instanceId) {
+				if renderer.IsInstanceDone(instanceId) && !doneInstances.Has(instanceId) {
 					logger.Printf("Done checking instance %s (%s)\n", instanceId, deploymentId)
-					doneInstanceIds.Add(instanceId)
+					doneInstances.Add(instanceId)
 				}
 			}
 		}
 	})
 
-	checker.Check(10, func() {
-		batchCheckInstanceIds := checkInstanceIds.Dif(doneInstanceIds)
+	t := NewThrottle(5.0, 0.025)
 
-		BatchGetDeploymentInstances(deployId string, instanceIds []string) ([]*codedeploy.InstanceSummary, error) {
+	checker.Check(10, func() {
+		for deploymentId, instanceIds := range checkInstances {
+			batchCheckInstances := instanceIds.Dif(doneInstances).List()
+
+			if len(batchCheckInstances) == 0 {
+				continue
+			}
+
+			summaries, err := aws.BatchGetDeploymentInstances(deploymentId, instanceIds.List())
+			if err != nil {
+				sleep := t.Throttle()
+				logger.Printf("Error getting deployment instance summaries %s: %s\n", deploymentId, err)
+				logger.Printf("Instance check throttle set to %s\n", sleep)
+				time.Sleep(sleep)
+			}
+
+			renderCh <- renderer.BatchUpdate(summaries)
+		}
+	})
 
 	// start goroutine aggregating rendered content
 	checker.Updater(renderCh, func(content []byte) {

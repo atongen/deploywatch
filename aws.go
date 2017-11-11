@@ -169,11 +169,14 @@ func (a *awsEnv) DescribeInstances(instanceIds []*string) ([]*ec2.Instance, erro
 	return instances, nil
 }
 
-func BatchGetDeploymentInstances(deployId string, instanceIds []string) ([]*codedeploy.InstanceSummary, error) {
-	input := &codedeploy.GetBatchDeploymentInstanceInput{}
+func (a *awsEnv) BatchGetDeploymentInstances(deployId string, instanceIds []string) ([]*codedeploy.InstanceSummary, error) {
+	input := &codedeploy.BatchGetDeploymentInstancesInput{}
 	input.SetDeploymentId(deployId)
 	input.SetInstanceIds(aws.StringSlice(instanceIds))
-	output := a.cdSvc.BatchGetDeploymentInstances(input)
-	err := errors.New(aws.String(output.ErrorMessage))
-	return output.InstanceSummary, err
+	output, err := a.cdSvc.BatchGetDeploymentInstances(input)
+	if err != nil {
+		return nil, err
+	}
+	err = errors.New(aws.StringValue(output.ErrorMessage))
+	return output.InstancesSummary, err
 }
