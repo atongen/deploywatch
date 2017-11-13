@@ -32,6 +32,20 @@ func NewRenderer(compact, hideSuccess bool) *Renderer {
 	}
 }
 
+func (r *Renderer) HasDeployment(deploymentId string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for i := 0; i < len(r.Deployments); i++ {
+		dId := *r.Deployments[i].DeploymentId
+		if dId == deploymentId {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (r *Renderer) GetDeployment(deploymentId string) *codedeploy.DeploymentInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

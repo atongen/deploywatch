@@ -119,6 +119,9 @@ func main() {
 		}
 
 		for _, deploymentId := range checkDeploymentIds.List() {
+			if !renderer.HasDeployment(deploymentId) {
+				logger.Printf("Starting to check deployment %s\n", deploymentId)
+			}
 			err := renderer.AddDeployment(aws, deploymentId)
 			if err != nil {
 				logger.Printf("Error getting deployment information: %s\n", err)
@@ -160,12 +163,15 @@ func main() {
 				continue
 			}
 
-			summaries, err := aws.BatchGetDeploymentInstances(deploymentId, instanceIds.List())
+			summaries, err := aws.BatchGetDeploymentInstances(deploymentId, batchCheckInstances)
 			if err != nil {
 				sleep := t.Throttle()
 				logger.Printf("Error getting deployment instance summaries %s: %s\n", deploymentId, err)
-				logger.Printf("Instance check throttle set to %s\n", sleep)
+				logger.Printf("Instance check throttle increased to %s\n", sleep)
 				time.Sleep(sleep)
+			} else {
+				// touch throttle for sleep decay
+				_ = t.Sleep()
 			}
 
 			renderCh <- renderer.BatchUpdate(summaries)

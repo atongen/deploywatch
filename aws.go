@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"os"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -177,6 +178,10 @@ func (a *awsEnv) BatchGetDeploymentInstances(deployId string, instanceIds []stri
 	if err != nil {
 		return nil, err
 	}
-	err = errors.New(aws.StringValue(output.ErrorMessage))
-	return output.InstancesSummary, err
+	errMsg := strings.TrimSpace(aws.StringValue(output.ErrorMessage))
+	if errMsg != "" {
+		err = errors.New(errMsg)
+		return nil, err
+	}
+	return output.InstancesSummary, nil
 }
