@@ -38,6 +38,28 @@ func (s *Set) Has(item string) bool {
 	return ok
 }
 
+// Int gives set interesection of s and t
+func (s *Set) Int(t *Set) *Set {
+	result := NewSet()
+	for _, item := range s.List() {
+		if t.Has(item) {
+			result.Add(item)
+		}
+	}
+	return result
+}
+
+func (s *Set) Dif(t *Set) *Set {
+	result := NewSet()
+	for _, item := range s.List() {
+		if !t.Has(item) {
+			result.Add(item)
+		}
+	}
+	return result
+
+}
+
 // Len returns the number of items in a set.
 func (s *Set) Len() int {
 	return len(s.List())

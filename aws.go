@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"os"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -14,7 +16,7 @@ type Aws interface {
 	GetDeployment(string) (*codedeploy.DeploymentInfo, error)
 	ListDeploymentInstances(string) ([]*string, error)
 	DescribeInstances([]*string) ([]*ec2.Instance, error)
-	GetDeploymentInstance(string, string) (*codedeploy.InstanceSummary, error)
+	BatchGetDeploymentInstances(string, []string) ([]*codedeploy.InstanceSummary, error)
 }
 
 type awsEnv struct {
@@ -168,14 +170,18 @@ func (a *awsEnv) DescribeInstances(instanceIds []*string) ([]*ec2.Instance, erro
 	return instances, nil
 }
 
-func (a *awsEnv) GetDeploymentInstance(deployId, instanceId string) (*codedeploy.InstanceSummary, error) {
-	input := &codedeploy.GetDeploymentInstanceInput{}
+func (a *awsEnv) BatchGetDeploymentInstances(deployId string, instanceIds []string) ([]*codedeploy.InstanceSummary, error) {
+	input := &codedeploy.BatchGetDeploymentInstancesInput{}
 	input.SetDeploymentId(deployId)
-	input.SetInstanceId(instanceId)
-	summary, err := a.cdSvc.GetDeploymentInstance(input)
+	input.SetInstanceIds(aws.StringSlice(instanceIds))
+	output, err := a.cdSvc.BatchGetDeploymentInstances(input)
 	if err != nil {
 		return nil, err
 	}
-
-	return summary.InstanceSummary, nil
+	errMsg := strings.TrimSpace(aws.StringValue(output.ErrorMessage))
+	if errMsg != "" {
+		err = errors.New(errMsg)
+		return nil, err
+	}
+	return output.InstancesSummary, nil
 }

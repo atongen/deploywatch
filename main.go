@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"path"
 	"strings"
@@ -120,6 +119,9 @@ func main() {
 		}
 
 		for _, deploymentId := range checkDeploymentIds.List() {
+			if !renderer.HasDeployment(deploymentId) {
+				logger.Printf("Starting to check deployment %s\n", deploymentId)
+			}
 			err := renderer.AddDeployment(aws, deploymentId)
 			if err != nil {
 				logger.Printf("Error getting deployment information: %s\n", err)
@@ -127,35 +129,52 @@ func main() {
 		}
 	})
 
-	t := NewThrottle(10.0, 0.025)
+	checkInstances := map[string]*Set{}
+	doneInstances := NewSet()
 
-	checkInstanceIds := NewSet()
-	// periodically check renderer for new instances
+	// periodically update list of instances to check
 	checker.Check(1, func() {
 		for _, deploymentId := range renderer.DeploymentIds() {
-			for _, instanceId := range renderer.InstanceIds(deploymentId) {
-				if !checkInstanceIds.Has(instanceId) {
-					checkInstanceIds.Add(instanceId)
-					logger.Printf("Starting to check instance %s (%s)\n", instanceId, deploymentId)
-					checker.CheckInstance(15, deploymentId, instanceId, func(dId, iId string) {
-						if !renderer.IsInstanceDone(iId) {
-							summary, err := aws.GetDeploymentInstance(dId, iId)
-							var sleep time.Duration
-							myRand := time.Duration((rand.Float64() * 5) + 5)
-							if err != nil {
-								sleep = t.Throttle() + myRand
-								logger.Printf("Error getting deployment instance summary (%s/%s): %s\n", dId, iId, err)
-								logger.Printf("Instance check throttle set to %s\n", sleep)
-							} else {
-								sleep = t.Sleep() + myRand
-								renderCh <- renderer.Update(summary)
-							}
+			if _, ok := checkInstances[deploymentId]; !ok {
+				checkInstances[deploymentId] = NewSet()
+			}
 
-							time.Sleep(sleep)
-						}
-					})
+			for _, instanceId := range renderer.InstanceIds(deploymentId) {
+				if !checkInstances[deploymentId].Has(instanceId) {
+					logger.Printf("Starting to check instance %s (%s)\n", instanceId, deploymentId)
+					checkInstances[deploymentId].Add(instanceId)
+				}
+
+				if renderer.IsInstanceDone(instanceId) && !doneInstances.Has(instanceId) {
+					logger.Printf("Done checking instance %s (%s)\n", instanceId, deploymentId)
+					doneInstances.Add(instanceId)
 				}
 			}
+		}
+	})
+
+	t := NewThrottle(5.0, 0.025)
+
+	checker.Check(10, func() {
+		for deploymentId, instanceIds := range checkInstances {
+			batchCheckInstances := instanceIds.Dif(doneInstances).List()
+
+			if len(batchCheckInstances) == 0 {
+				continue
+			}
+
+			summaries, err := aws.BatchGetDeploymentInstances(deploymentId, batchCheckInstances)
+			if err != nil {
+				sleep := t.Throttle()
+				logger.Printf("Error getting deployment instance summaries %s: %s\n", deploymentId, err)
+				logger.Printf("Instance check throttle increased to %s\n", sleep)
+				time.Sleep(sleep)
+			} else {
+				// touch throttle for sleep decay
+				_ = t.Sleep()
+			}
+
+			renderCh <- renderer.BatchUpdate(summaries)
 		}
 	})
 
