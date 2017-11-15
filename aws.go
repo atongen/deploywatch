@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"math"
 	"os"
 	"strings"
 
@@ -12,10 +13,10 @@ import (
 )
 
 type Aws interface {
-	ListDeployments(string, string, []*string) ([]*string, error)
+	ListDeployments(string, string, []string) ([]string, error)
 	GetDeployment(string) (*codedeploy.DeploymentInfo, error)
-	ListDeploymentInstances(string) ([]*string, error)
-	DescribeInstances([]*string) ([]*ec2.Instance, error)
+	ListDeploymentInstances(string) ([]string, error)
+	DescribeInstances([]string) ([]*ec2.Instance, error)
 	BatchGetDeploymentInstances(string, []string) ([]*codedeploy.InstanceSummary, error)
 }
 
@@ -50,7 +51,7 @@ func NewAwsEnv() Aws {
 	return &a
 }
 
-func (a *awsEnv) ListDeployments(applicationName, deploymentGroupName string, includeOnlyStatuses []*string) ([]*string, error) {
+func (a *awsEnv) ListDeployments(applicationName, deploymentGroupName string, includeOnlyStatuses []string) ([]string, error) {
 	input := &codedeploy.ListDeploymentsInput{}
 	if applicationName != "" {
 		input.SetApplicationName(applicationName)
@@ -59,11 +60,11 @@ func (a *awsEnv) ListDeployments(applicationName, deploymentGroupName string, in
 		input.SetDeploymentGroupName(deploymentGroupName)
 	}
 	if len(includeOnlyStatuses) > 0 {
-		input.SetIncludeOnlyStatuses(includeOnlyStatuses)
+		input.SetIncludeOnlyStatuses(aws.StringSlice(includeOnlyStatuses))
 	}
 
 	var (
-		deployments []*string
+		deployments []string
 		nextToken   *string
 	)
 
@@ -79,7 +80,7 @@ func (a *awsEnv) ListDeployments(applicationName, deploymentGroupName string, in
 
 		nextToken = resp.NextToken
 
-		deployments = append(deployments, resp.Deployments...)
+		deployments = append(deployments, aws.StringValueSlice(resp.Deployments)...)
 
 		if nextToken == nil {
 			break
@@ -100,12 +101,12 @@ func (a *awsEnv) GetDeployment(deployId string) (*codedeploy.DeploymentInfo, err
 	return output.DeploymentInfo, nil
 }
 
-func (a *awsEnv) ListDeploymentInstances(deployId string) ([]*string, error) {
+func (a *awsEnv) ListDeploymentInstances(deployId string) ([]string, error) {
 	input := &codedeploy.ListDeploymentInstancesInput{}
 	input.SetDeploymentId(deployId)
 
 	var (
-		instanceList []*string
+		instanceList []string
 		nextToken    *string
 	)
 
@@ -121,7 +122,7 @@ func (a *awsEnv) ListDeploymentInstances(deployId string) ([]*string, error) {
 
 		nextToken = resp.NextToken
 
-		instanceList = append(instanceList, resp.InstancesList...)
+		instanceList = append(instanceList, aws.StringValueSlice(resp.InstancesList)...)
 
 		if nextToken == nil {
 			break
@@ -131,39 +132,44 @@ func (a *awsEnv) ListDeploymentInstances(deployId string) ([]*string, error) {
 	return instanceList, nil
 }
 
-func (a *awsEnv) DescribeInstances(instanceIds []*string) ([]*ec2.Instance, error) {
-	input := &ec2.DescribeInstancesInput{
-		Filters: []*ec2.Filter{
-			{
-				Name:   aws.String("instance-id"),
-				Values: instanceIds,
+func (a *awsEnv) DescribeInstances(instanceIds []string) ([]*ec2.Instance, error) {
+	var instances []*ec2.Instance
+
+	partitionedInstanceIds := partition(instanceIds, 200)
+
+	for _, ids := range partitionedInstanceIds {
+		input := &ec2.DescribeInstancesInput{
+			Filters: []*ec2.Filter{
+				{
+					Name:   aws.String("instance-id"),
+					Values: aws.StringSlice(ids),
+				},
 			},
-		},
-	}
-
-	var (
-		instances []*ec2.Instance
-		nextToken *string
-	)
-
-	for {
-		if nextToken != nil {
-			input.NextToken = nextToken
 		}
 
-		resp, err := a.ec2Svc.DescribeInstances(input)
-		if err != nil {
-			return nil, err
-		}
+		var (
+			nextToken *string
+		)
 
-		nextToken = resp.NextToken
+		for {
+			if nextToken != nil {
+				input.NextToken = nextToken
+			}
 
-		for _, res := range resp.Reservations {
-			instances = append(instances, res.Instances...)
-		}
+			resp, err := a.ec2Svc.DescribeInstances(input)
+			if err != nil {
+				return nil, err
+			}
 
-		if nextToken == nil {
-			break
+			nextToken = resp.NextToken
+
+			for _, res := range resp.Reservations {
+				instances = append(instances, res.Instances...)
+			}
+
+			if nextToken == nil {
+				break
+			}
 		}
 	}
 
@@ -184,4 +190,38 @@ func (a *awsEnv) BatchGetDeploymentInstances(deployId string, instanceIds []stri
 		return nil, err
 	}
 	return output.InstancesSummary, nil
+}
+
+// partition splits a slice of strings into multiple
+// slices, each no larger than size
+func partition(data []string, size int) [][]string {
+	if size <= 0 {
+		return [][]string{}
+	}
+
+	// we will end up with n slices of length size or less
+	n := int(math.Ceil(float64(len(data)) / float64(size)))
+
+	if n <= 0 {
+		return [][]string{}
+	}
+
+	result := make([][]string, n)
+
+	for i := 0; i < n; i++ {
+		start := i * size
+		end := (i + 1) * size
+		subLen := end - start
+		println(start, end, subLen)
+
+		subslice := make([]string, subLen)
+
+		for j := 0; j < subLen; j++ {
+			subslice[j] = data[start+j]
+		}
+
+		result[i] = subslice
+	}
+
+	return result
 }
