@@ -12,6 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 )
 
+// Aws interface hides all the difficult-to-manage string pointers
+// that the api returns
 type Aws interface {
 	ListDeployments(string, string, []string) ([]string, error)
 	GetDeployment(string) (*codedeploy.DeploymentInfo, error)
@@ -135,6 +137,7 @@ func (a *awsEnv) ListDeploymentInstances(deployId string) ([]string, error) {
 func (a *awsEnv) DescribeInstances(instanceIds []string) ([]*ec2.Instance, error) {
 	var instances []*ec2.Instance
 
+	// We can only ask for a maximum of 200 instance descriptions at a time
 	partitionedInstanceIds := partition(instanceIds, 200)
 
 	for _, ids := range partitionedInstanceIds {

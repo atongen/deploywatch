@@ -98,9 +98,8 @@ func (r *Renderer) AddDeployment(aws Aws, deploymentId string) error {
 	newInstanceIds := []string{}
 
 	for i := 0; i < len(instanceIds); i++ {
-		instanceId := instanceIds[i]
-		if !r.DeploymentInstanceMap[deploymentId].Has(instanceId) {
-			newInstanceIds = append(newInstanceIds, instanceId)
+		if !r.DeploymentInstanceMap[deploymentId].Has(instanceIds[i]) {
+			newInstanceIds = append(newInstanceIds, instanceIds[i])
 		}
 	}
 
