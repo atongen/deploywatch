@@ -9,6 +9,9 @@ func TestPartition(t *testing.T) {
 		r [][]string
 	}{
 		{
+			[]string{}, -1, [][]string{},
+		},
+		{
 			[]string{}, 0, [][]string{},
 		},
 		{
@@ -18,6 +21,9 @@ func TestPartition(t *testing.T) {
 			[]string{"0"}, 0, [][]string{},
 		},
 		{
+			[]string{"0"}, 1, [][]string{[]string{"0"}},
+		},
+		{
 			[]string{"0", "1"}, 1, [][]string{[]string{"0"}, []string{"1"}},
 		},
 		{
@@ -25,6 +31,12 @@ func TestPartition(t *testing.T) {
 		},
 		{
 			[]string{"0", "1", "2"}, 2, [][]string{[]string{"0", "1"}, []string{"2"}},
+		},
+		{
+			[]string{"0", "1", "2", "3"}, 2, [][]string{[]string{"0", "1"}, []string{"2", "3"}},
+		},
+		{
+			[]string{"0", "1", "2", "3", "4"}, 6, [][]string{[]string{"0", "1", "2", "3", "4"}},
 		},
 	} {
 		r := partition(tt.a, tt.b)

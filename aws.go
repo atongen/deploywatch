@@ -193,7 +193,7 @@ func (a *awsEnv) BatchGetDeploymentInstances(deployId string, instanceIds []stri
 }
 
 // partition splits a slice of strings into multiple
-// slices, each no larger than size
+// sub-slices, each no longer than `size`
 func partition(data []string, size int) [][]string {
 	if size <= 0 {
 		return [][]string{}
@@ -210,9 +210,8 @@ func partition(data []string, size int) [][]string {
 
 	for i := 0; i < n; i++ {
 		start := i * size
-		end := (i + 1) * size
+		end := min(len(data), (i+1)*size)
 		subLen := end - start
-		println(start, end, subLen)
 
 		subslice := make([]string, subLen)
 
@@ -224,4 +223,8 @@ func partition(data []string, size int) [][]string {
 	}
 
 	return result
+}
+
+func min(x, y int) int {
+	return int(math.Min(float64(x), float64(y)))
 }
