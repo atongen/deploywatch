@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -172,6 +173,10 @@ func (a *awsEnv) DescribeInstances(instanceIds []string) ([]*ec2.Instance, error
 
 			if nextToken == nil {
 				break
+			} else {
+				// pause briefly between each iteration
+				// to avoid rate throttling
+				time.Sleep(100 * time.Millisecond)
 			}
 		}
 	}
@@ -184,8 +189,11 @@ func (a *awsEnv) BatchGetDeploymentInstances(deployId string, instanceIds []stri
 
 	// We can only ask for a maximum of 100 deployment instances at a time
 	partitionedInstanceIds := partition(instanceIds, 100)
+	n := len(partitionedInstanceIds) - 1
 
-	for _, ids := range partitionedInstanceIds {
+	for i := 0; i < len(partitionedInstanceIds); i++ {
+		ids := partitionedInstanceIds[i]
+
 		input := &codedeploy.BatchGetDeploymentInstancesInput{}
 		input.SetDeploymentId(deployId)
 		input.SetInstanceIds(aws.StringSlice(ids))
@@ -202,6 +210,12 @@ func (a *awsEnv) BatchGetDeploymentInstances(deployId string, instanceIds []stri
 		}
 
 		instanceSummaries = append(instanceSummaries, output.InstancesSummary...)
+
+		// pause briefly between each iteration
+		// to avoid rate throttling
+		if i < n {
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
 
 	return instanceSummaries, nil
