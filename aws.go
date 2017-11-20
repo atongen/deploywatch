@@ -2,8 +2,10 @@ package main
 
 import (
 	"errors"
+	"math"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -11,11 +13,13 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 )
 
+// Aws interface hides all the difficult-to-manage string pointers
+// that the api returns
 type Aws interface {
-	ListDeployments(string, string, []*string) ([]*string, error)
+	ListDeployments(string, string, []string) ([]string, error)
 	GetDeployment(string) (*codedeploy.DeploymentInfo, error)
-	ListDeploymentInstances(string) ([]*string, error)
-	DescribeInstances([]*string) ([]*ec2.Instance, error)
+	ListDeploymentInstances(string) ([]string, error)
+	DescribeInstances([]string) ([]*ec2.Instance, error)
 	BatchGetDeploymentInstances(string, []string) ([]*codedeploy.InstanceSummary, error)
 }
 
@@ -50,7 +54,7 @@ func NewAwsEnv() Aws {
 	return &a
 }
 
-func (a *awsEnv) ListDeployments(applicationName, deploymentGroupName string, includeOnlyStatuses []*string) ([]*string, error) {
+func (a *awsEnv) ListDeployments(applicationName, deploymentGroupName string, includeOnlyStatuses []string) ([]string, error) {
 	input := &codedeploy.ListDeploymentsInput{}
 	if applicationName != "" {
 		input.SetApplicationName(applicationName)
@@ -59,11 +63,11 @@ func (a *awsEnv) ListDeployments(applicationName, deploymentGroupName string, in
 		input.SetDeploymentGroupName(deploymentGroupName)
 	}
 	if len(includeOnlyStatuses) > 0 {
-		input.SetIncludeOnlyStatuses(includeOnlyStatuses)
+		input.SetIncludeOnlyStatuses(aws.StringSlice(includeOnlyStatuses))
 	}
 
 	var (
-		deployments []*string
+		deployments []string
 		nextToken   *string
 	)
 
@@ -79,7 +83,7 @@ func (a *awsEnv) ListDeployments(applicationName, deploymentGroupName string, in
 
 		nextToken = resp.NextToken
 
-		deployments = append(deployments, resp.Deployments...)
+		deployments = append(deployments, aws.StringValueSlice(resp.Deployments)...)
 
 		if nextToken == nil {
 			break
@@ -100,12 +104,12 @@ func (a *awsEnv) GetDeployment(deployId string) (*codedeploy.DeploymentInfo, err
 	return output.DeploymentInfo, nil
 }
 
-func (a *awsEnv) ListDeploymentInstances(deployId string) ([]*string, error) {
+func (a *awsEnv) ListDeploymentInstances(deployId string) ([]string, error) {
 	input := &codedeploy.ListDeploymentInstancesInput{}
 	input.SetDeploymentId(deployId)
 
 	var (
-		instanceList []*string
+		instanceList []string
 		nextToken    *string
 	)
 
@@ -121,7 +125,7 @@ func (a *awsEnv) ListDeploymentInstances(deployId string) ([]*string, error) {
 
 		nextToken = resp.NextToken
 
-		instanceList = append(instanceList, resp.InstancesList...)
+		instanceList = append(instanceList, aws.StringValueSlice(resp.InstancesList)...)
 
 		if nextToken == nil {
 			break
@@ -131,39 +135,49 @@ func (a *awsEnv) ListDeploymentInstances(deployId string) ([]*string, error) {
 	return instanceList, nil
 }
 
-func (a *awsEnv) DescribeInstances(instanceIds []*string) ([]*ec2.Instance, error) {
-	input := &ec2.DescribeInstancesInput{
-		Filters: []*ec2.Filter{
-			{
-				Name:   aws.String("instance-id"),
-				Values: instanceIds,
+func (a *awsEnv) DescribeInstances(instanceIds []string) ([]*ec2.Instance, error) {
+	var instances []*ec2.Instance
+
+	// We can only ask for a maximum of 200 instance descriptions at a time
+	partitionedInstanceIds := partition(instanceIds, 200)
+
+	for _, ids := range partitionedInstanceIds {
+		input := &ec2.DescribeInstancesInput{
+			Filters: []*ec2.Filter{
+				{
+					Name:   aws.String("instance-id"),
+					Values: aws.StringSlice(ids),
+				},
 			},
-		},
-	}
-
-	var (
-		instances []*ec2.Instance
-		nextToken *string
-	)
-
-	for {
-		if nextToken != nil {
-			input.NextToken = nextToken
 		}
 
-		resp, err := a.ec2Svc.DescribeInstances(input)
-		if err != nil {
-			return nil, err
-		}
+		var (
+			nextToken *string
+		)
 
-		nextToken = resp.NextToken
+		for {
+			if nextToken != nil {
+				input.NextToken = nextToken
+			}
 
-		for _, res := range resp.Reservations {
-			instances = append(instances, res.Instances...)
-		}
+			resp, err := a.ec2Svc.DescribeInstances(input)
+			if err != nil {
+				return nil, err
+			}
 
-		if nextToken == nil {
-			break
+			nextToken = resp.NextToken
+
+			for _, res := range resp.Reservations {
+				instances = append(instances, res.Instances...)
+			}
+
+			if nextToken == nil {
+				break
+			} else {
+				// pause briefly between each iteration
+				// to avoid rate throttling
+				time.Sleep(100 * time.Millisecond)
+			}
 		}
 	}
 
@@ -171,17 +185,75 @@ func (a *awsEnv) DescribeInstances(instanceIds []*string) ([]*ec2.Instance, erro
 }
 
 func (a *awsEnv) BatchGetDeploymentInstances(deployId string, instanceIds []string) ([]*codedeploy.InstanceSummary, error) {
-	input := &codedeploy.BatchGetDeploymentInstancesInput{}
-	input.SetDeploymentId(deployId)
-	input.SetInstanceIds(aws.StringSlice(instanceIds))
-	output, err := a.cdSvc.BatchGetDeploymentInstances(input)
-	if err != nil {
-		return nil, err
+	var instanceSummaries []*codedeploy.InstanceSummary
+
+	// We can only ask for a maximum of 100 deployment instances at a time
+	partitionedInstanceIds := partition(instanceIds, 100)
+	n := len(partitionedInstanceIds) - 1
+
+	for i := 0; i < len(partitionedInstanceIds); i++ {
+		ids := partitionedInstanceIds[i]
+
+		input := &codedeploy.BatchGetDeploymentInstancesInput{}
+		input.SetDeploymentId(deployId)
+		input.SetInstanceIds(aws.StringSlice(ids))
+
+		output, err := a.cdSvc.BatchGetDeploymentInstances(input)
+		if err != nil {
+			return nil, err
+		}
+
+		errMsg := strings.TrimSpace(aws.StringValue(output.ErrorMessage))
+		if errMsg != "" {
+			err = errors.New(errMsg)
+			return nil, err
+		}
+
+		instanceSummaries = append(instanceSummaries, output.InstancesSummary...)
+
+		// pause briefly between each iteration
+		// to avoid rate throttling
+		if i < n {
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
-	errMsg := strings.TrimSpace(aws.StringValue(output.ErrorMessage))
-	if errMsg != "" {
-		err = errors.New(errMsg)
-		return nil, err
+
+	return instanceSummaries, nil
+}
+
+// partition splits a slice of strings into multiple
+// sub-slices, each no longer than `size`
+func partition(data []string, size int) [][]string {
+	if size <= 0 {
+		return [][]string{}
 	}
-	return output.InstancesSummary, nil
+
+	// we will end up with n slices of length size or less
+	n := int(math.Ceil(float64(len(data)) / float64(size)))
+
+	if n <= 0 {
+		return [][]string{}
+	}
+
+	result := make([][]string, n)
+
+	for i := 0; i < n; i++ {
+		start := i * size
+		end := min(len(data), (i+1)*size)
+		subLen := end - start
+
+		subslice := make([]string, subLen)
+
+		for j := 0; j < subLen; j++ {
+			subslice[j] = data[start+j]
+		}
+
+		result[i] = subslice
+	}
+
+	return result
+}
+
+func min(x, y int) int {
+	return int(math.Min(float64(x), float64(y)))
 }

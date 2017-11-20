@@ -93,10 +93,7 @@ func main() {
 
 	// periodically check for updated deployment information
 	// Created | Queued | InProgress | Succeeded | Failed | Stopped | Ready
-	iosCreated := "Created"
-	iosQueued := "Queued"
-	iosInProgress := "InProgress"
-	includeOnlyStatuses := []*string{&iosCreated, &iosQueued, &iosInProgress}
+	includeOnlyStatuses := []string{"Created", "Queued", "InProgress"}
 
 	checkDeploymentIds := NewSet()
 	for _, deploymentId := range flag.Args() {
@@ -111,8 +108,8 @@ func main() {
 				if err != nil {
 					logger.Printf("Error getting deployments: %s %s %s\n", *nameFlag, group, err)
 				} else {
-					for _, deploymentIdPtr := range currentDeployments {
-						checkDeploymentIds.Add(*deploymentIdPtr)
+					for _, deploymentId := range currentDeployments {
+						checkDeploymentIds.Add(deploymentId)
 					}
 				}
 			}
