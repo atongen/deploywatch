@@ -180,19 +180,31 @@ func (a *awsEnv) DescribeInstances(instanceIds []string) ([]*ec2.Instance, error
 }
 
 func (a *awsEnv) BatchGetDeploymentInstances(deployId string, instanceIds []string) ([]*codedeploy.InstanceSummary, error) {
-	input := &codedeploy.BatchGetDeploymentInstancesInput{}
-	input.SetDeploymentId(deployId)
-	input.SetInstanceIds(aws.StringSlice(instanceIds))
-	output, err := a.cdSvc.BatchGetDeploymentInstances(input)
-	if err != nil {
-		return nil, err
+	var instanceSummaries []*codedeploy.InstanceSummary
+
+	// We can only ask for a maximum of 100 deployment instances at a time
+	partitionedInstanceIds := partition(instanceIds, 100)
+
+	for _, ids := range partitionedInstanceIds {
+		input := &codedeploy.BatchGetDeploymentInstancesInput{}
+		input.SetDeploymentId(deployId)
+		input.SetInstanceIds(aws.StringSlice(ids))
+
+		output, err := a.cdSvc.BatchGetDeploymentInstances(input)
+		if err != nil {
+			return nil, err
+		}
+
+		errMsg := strings.TrimSpace(aws.StringValue(output.ErrorMessage))
+		if errMsg != "" {
+			err = errors.New(errMsg)
+			return nil, err
+		}
+
+		instanceSummaries = append(instanceSummaries, output.InstancesSummary...)
 	}
-	errMsg := strings.TrimSpace(aws.StringValue(output.ErrorMessage))
-	if errMsg != "" {
-		err = errors.New(errMsg)
-		return nil, err
-	}
-	return output.InstancesSummary, nil
+
+	return instanceSummaries, nil
 }
 
 // partition splits a slice of strings into multiple
